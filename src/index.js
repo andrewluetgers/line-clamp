@@ -1,8 +1,7 @@
 
-var strCache = {},
-	WHITESPACE_REGEX = /(?=\s)/,
-	TRAILING_WHITESPACE_REGEX = /\s+$/;
 
+var strCache = {},
+	trailingWhitespace = /\s+$/;
 
 module.exports = function (element, lines, ellip) {
 	
@@ -31,58 +30,44 @@ module.exports = function (element, lines, ellip) {
 		return;
 	}
 	
-	truncateByWord(element, maxHeight);
-	truncateByCharacter(element, maxHeight, ellipsis);
+	truncate(element, maxHeight, ellipsis);
 };
 
 
-// Truncate the text of element such that it does not exceed the maxHeight.
-// Return true if we need to truncate by character, else return false
-function truncateByWord(element, maxHeight) {
-	var innerHTML = element.innerHTML;
-	
-	// Split the text of `element` by whitespace.
-	var chunks = innerHTML.split(WHITESPACE_REGEX);
-	
-	// The text does not contain whitespace; we need to attempt to truncate
-	// by character.
-	if (chunks.length === 1) {
-		return true;
-	}
-	
-	// Loop over the chunks, and try to fit more chunks into the `element`.
-	var i = -1;
-	var length = chunks.length;
-	var newInnerHTML = '';
-	// todo binary search instead
-	while (++i < length) {
-		newInnerHTML += chunks[i];
-		element.innerHTML = newInnerHTML;
-		
-		// If the new height now exceeds the maxHeight (where it did not
-		// in the previous iteration), we know that we are at most one line
-		// over the optimal text length.
-		if (element.offsetHeight > maxHeight) {
-			return true;
-		}
-	}
-	
-	return false;
+function truncStr(str, len, ellipsis) {
+	return str.split("").slice(0, len).join("").replace(trailingWhitespace, '') + ellipsis;
 }
 
-// Append ellip to element, trimming off trailing characters
-// in element such that element will not exceed the maxHeight.
-function truncateByCharacter(element, maxHeight, ellip) {
-	var innerHTML = element.innerHTML;
-	var length = innerHTML.length;
+// Truncate at the first character that causes the
+// wrapping of the text inside of element to exceed the maxHeight
+// modified binary search based string truncation
+// based on http://rosettacode.org/wiki/Binary_search#JavaScript
+function truncate(el, maxHeight, ellipsis) {
+	var str 	= el.innerHTML,
+		hi 		= str.length - 1,
+		mid 	= 0,
+		lo 		= 0,
+		height 	= 0,
+		newStr 	= "",
+		prevStr = "",
+		last	= false;
 	
-	// brute force sequential trim + height test
-	// todo binary search instead
-	while (length > 0) {
-		element.innerHTML = innerHTML.substring(0, length).replace(TRAILING_WHITESPACE_REGEX, '') + ellip;
-		if (element.offsetHeight <= maxHeight) {
-			return;
+	while (lo <= hi || height > maxHeight) {
+		mid 	= Math.floor((lo + hi) / 2); 			// calc a new truncation point
+		prevStr	= newStr;								// to test length change
+		newStr 	= truncStr(str, mid, ellipsis);			// apply truncation
+		last	= !(newStr.length - prevStr.length); 	// finished when no change to length
+		el.innerHTML = newStr;							// update the dom w/ truncated str
+		height = el.offsetHeight;						// get new height
+		
+		if (height > maxHeight) { 	// text wraps past max height
+			hi = mid - 1;			// so move upper bound down
+			
+		} else if (!last) {			// not the last character before next wrap
+			lo = mid + 1;			// so move the lower bound up
+			
+		} else {
+			return;					// quit loop we done
 		}
-		length--;
 	}
 }
